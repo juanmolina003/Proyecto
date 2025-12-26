@@ -1,9 +1,7 @@
 package main
 
 import (
-	"fmt"
 	"log"
-	"math/rand"
 	"net/http"
 	"time"
 )
@@ -19,13 +17,6 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "static/logo.png")
 		return
 	}
-}
-
-func vulnerabilidadSeguridad() {
-	// gosec detectará esto como inseguro porque math/rand
-	// no es criptográficamente seguro para generar secretos/tokens.
-	token := rand.Intn(100)
-	fmt.Println(token)
 }
 
 /*func main() {
