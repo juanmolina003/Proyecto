@@ -1,120 +1,48 @@
-name: Pipeline DevSecOps Integral (CI/CD)
+name: Go Security and Build Pipeline
 
-# DISPARADOR: Se ejecuta cuando alguien hace push a la rama 'main'
 on:
   push:
-    branches: [ "main" ]
+    branches: [ main, develop ]
   pull_request:
-    branches: [ "main" ]
-  workflow_dispatch: # Para poder lanzarlo a mano si hace falta
+    branches: [ main, develop ]
 
 jobs:
-  integracion-continua:
-    name: Build y Analisis de Seguridad
-    runs-on: ubuntu-latest # Usamos una máquina Linux de GitHub
-
-    steps:
-    # 1. Bajar el código del repositorio
-    - name: Checkout del código
-      uses: actions/checkout@v4
-
-    # 2. Instalar Go (Versión del proyecto)
-    - name: Configurar Go 1.25.5
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.25.5'
-
-    # 3. REQUISITO: Análisis de Seguridad Estático (SAST)
-    # Usamos Gosec para buscar vulnerabilidades en el código
-    - name: Ejecutar Análisis de Seguridad (Gosec)
-      uses: securego/gosec@master
-      with:
-        args: ./...
-
-    # 4. REQUISITO: Ejecución de Tests
-    # Si los tests fallan, el pipeline se detiene aquí
-    - name: Ejecutar Tests Unitarios
-      run: go test -v ./...
-
-    # 5. REQUISITO: Build Automático
-    # Si todo lo anterior está bien, creamos el ejecutable para Linux (nuestro destino)
-    - name: Construir Aplicación (Build)
-      run: |
-        mkdir -p build
-        GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -v -o build/pps_app ./...
-
-    # 6. Guardar el binario para que el siguiente Job lo pueda usar
-    - name: Subir Artefacto
-      uses: actions/upload-artifact@v4
-      with:
-        name: pps_app
-        path: build/pps_app
-
-  despliegue-seguro:
-    name: Despliegue en Servidor Linux
-    needs: integracion-continua # Solo se desplegará si el CI sale perfecto
+  build-and-test:
     runs-on: ubuntu-latest
-    
     steps:
-    - name: Descargar el binario construido
-      uses: actions/download-artifact@v4
-      with:
-        name: pps_app
-        path: build
+      # 1. Checkout del código
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    # 7. REQUISITO: Enviar el archivo al servidor mediante el bastión
-    # Usamos los secretos para no dejar ninguna IP o puerto a la vista
-    - name: Copiar binario al servidor (SCP)
-      uses: appleboy/scp-action@v0.1.7
-      with:
-        host: ${{ secrets.SSH_HOST }}
-        username: ${{ secrets.SSH_USER }}
-        port: ${{ secrets.SSH_PORT }}
-        key: ${{ secrets.SSH_KEY }}
-        source: "build/pps_app"
-        target: "/opt/app_cyber5"
-        strip_components: 1
-        overwrite: true
-        debug: true # Esto nos dará más pistas si falla
+      # 2. Configurar entorno de Go
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21' # Ajusta a tu versión si es necesario
 
-    - name: Ejecución remota y Reinicio
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.SSH_HOST }}
-        username: ${{ secrets.SSH_USER }}
-        port: ${{ secrets.SSH_PORT }}
-        key: ${{ secrets.SSH_KEY }}
-        script: |
-          chmod +x /opt/app_cyber5/pps_app
-          sudo systemctl restart pps_app.service
+      # 3. Instalación de dependencias
+      - name: Install dependencies
+        run: go mod tidy
 
-          
-          # Paso 1: Si ya hay una app corriendo, le hacemos un backup por si las moscas
-          if [ -f pps_app ]; then
-            cp pps_app pps_app.bak.$ts
-          fi
+      # 4. Ejecución de Tests (Punto 2 de la rúbrica)
+      - name: Run Tests
+        run: go test -v ./...
 
-          # Paso 2: Ponemos el nuevo binario en su sitio y le damos permisos
-          mv pps_app.new pps_app
-          chmod +x pps_app
+      # 5. Análisis de Seguridad Estático (SAST) - Punto 2 de la rúbrica
+      # Usaremos gosec, que es el estándar para Go
+      - name: Run Security Scan (SAST)
+        uses: securego/gosec@master
+        with:
+          args: ./...
 
-          # Paso 3: Reiniciamos el servicio para que cargue la nueva versión
-          sudo systemctl restart "${{ secrets.SERVICE_NAME }}"
+      # 6. Build de la aplicación
+      - name: Build Application
+        run: go build -o my-secure-app main.go
 
-          # Paso 4: TEST DE SALUD (Health Check)
-          # Esperamos un poco y comprobamos si la app responde en el puerto
-          sleep 3
-          PORT=${{ secrets.APP_PORT }}
-          PORT=${PORT:-8080}
-          
-          if curl -fS --max-time 5 http://127.0.0.1:${PORT}/health; then
-            echo "¡Despliegue exitoso y validado!"
-          else
-            echo "¡ERROR! La app no responde. Iniciando Rollback automático..."
-            if [ -f pps_app.bak.$ts ]; then
-              mv pps_app.bak.$ts pps_app
-              sudo systemctl restart "${{ secrets.SERVICE_NAME }}"
-              echo "Rollback completado. El servidor vuelve a estar en la versión anterior."
-            fi
-            exit 1
-          fi
+      # 7. Guardar el binario como artefacto (Lo que pedías)
+      - name: Save Binary Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-binary-executable
+          path: my-secure-app
+          retention-days: 5

@@ -1,0 +1,10 @@
+2025/12/26 20:27:56 level=info msg='Iniciando servidor seguro'
+2025/12/26 20:28:03 level=info method=GET path=/favicon.ico remote_addr=[::1]:58972
+2025/12/26 20:28:35 level=info method=GET path=/ remote_addr=[::1]:54441
+2025/12/26 20:29:09 level=info method=GET path=/simular-fallo remote_addr=[::1]:50021
+2025/12/26 20:31:03 level=info msg='Iniciando servidor seguro'
+2025/12/26 20:32:01 level=critical msg='Evento anómalo detectado' method=GET path=/simular-fallo remote_addr=[::1]:55644
+2025/12/26 20:32:06 level=warning msg='Ruta no encontrada' method=GET path=/holaa remote_addr=[::1]:55644
+2025/12/26 20:46:36 level=critical msg='Evento anómalo detectado' method=GET path=/simular-fallo
+2025/12/26 21:07:56 level=critical msg='Evento anómalo detectado' method=GET path=/simular-fallo
+2025/12/26 21:07:59 level=critical msg='Evento anómalo detectado' method=GET path=/simular-fallo
