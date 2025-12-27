@@ -52,21 +52,35 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	http.NotFound(w, r)
 }
 
+// ... (resto de tu código arriba)
+
 func main() {
-	// Configuración de archivo de logs
+	// 1. Configuración del handler
+	http.HandleFunc("/", handler)
 	http.Handle("/metrics", promhttp.Handler())
-	f, _ := os.OpenFile("app.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+
+	// 2. CORRECCIÓN G302: Cambiamos 0644 por 0600 para mayor seguridad
+	f, err := os.OpenFile("app.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil {
+		fmt.Printf("Error al abrir archivo de logs: %v\n", err)
+		return
+	}
 	defer f.Close()
 	log.SetOutput(f)
 
-	http.HandleFunc("/", handler)
-
+	// 3. Configuración SEGURA del servidor
 	server := &http.Server{
 		Addr:         ":8080",
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  15 * time.Second,
 	}
 
-	fmt.Println("Servidor iniciado con sistema de alertas activo.")
-	server.ListenAndServe()
+	fmt.Println("Servidor iniciado con sistema de alertas activo en http://localhost:8080")
+	log.Println("level=info msg='Iniciando servidor seguro'")
+
+	// 4. CORRECCIÓN G104: Controlamos el error de ListenAndServe
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatalf("Error crítico al arrancar el servidor: %v", err)
+	}
 }
