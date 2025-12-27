@@ -18,18 +18,17 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: '1.21' # Ajusta a tu versión si es necesario
+          go-version: '1.21'
 
       # 3. Instalación de dependencias
       - name: Install dependencies
         run: go mod tidy
 
-      # 4. Ejecución de Tests (Punto 2 de la rúbrica)
+      # 4. Ejecución de Tests
       - name: Run Tests
         run: go test -v ./...
 
-      # 5. Análisis de Seguridad Estático (SAST) - Punto 2 de la rúbrica
-      # Usaremos gosec, que es el estándar para Go
+      # 5. Análisis de Seguridad Estático (SAST)
       - name: Run Security Scan (SAST)
         uses: securego/gosec@master
         with:
@@ -39,10 +38,51 @@ jobs:
       - name: Build Application
         run: go build -o my-secure-app main.go
 
-      # 7. Guardar el binario como artefacto (Lo que pedías)
+      # 7. Guardar el binario como artefacto
       - name: Save Binary Artifact
         uses: actions/upload-artifact@v4
         with:
           name: go-binary-executable
           path: my-secure-app
           retention-days: 5
+
+  # NUEVO TRABAJO: Despliegue Automatizado (CD)
+  deploy:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    # Solo desplegamos cuando se hace push a la rama 'main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Deploy to Server via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_NAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SERVER_PORT }} # Usamos el puerto 55000
+          script: |
+            # 1. Definimos la carpeta de trabajo
+            cd /home/grup1
+            
+            # 2. Si no existe el código, lo clonamos. Si existe, actualizamos.
+            if [ ! -d "Proyecto" ]; then
+              git clone https://github.com/${{ github.repository }}.git Proyecto
+            fi
+            
+            cd Proyecto
+            git fetch --all
+            git checkout main
+            git pull origin main
+            
+            # 3. Compilamos el binario directamente en el servidor
+            go build -o server_exe main.go
+            
+            # 4. Reiniciamos el servicio
+            # Intentamos matar el proceso que esté usando el puerto 8080 (si existe)
+            fuser -k 8080/tcp || true
+            
+            # Ejecutamos la app en segundo plano con nohup
+            # Los logs de salida se guardarán en output.log dentro de /home/grup1/Proyecto
+            nohup ./server_exe > output.log 2>&1 &
+            
+            echo "--- DESPLIEGUE AUTOMATIZADO COMPLETADO CON ÉXITO ---"
