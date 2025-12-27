@@ -29,9 +29,10 @@ jobs:
         with:
           args: ./...
 
-      - name: Build Application (Cross-Compilation)
-        # Forzamos la arquitectura Linux de 64 bits para AWS
-        run: GOOS=linux GOARCH=amd64 go build -o pps_app_linux main.go
+      # 6. Build de la aplicación (Estático y Forzado)
+      - name: Build Application (Static Cross-Compilation)
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -o pps_app_linux main.go
 
       - name: Save Binary Artifact
         uses: actions/upload-artifact@v4
