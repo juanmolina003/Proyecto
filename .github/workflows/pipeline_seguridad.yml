@@ -36,7 +36,8 @@ jobs:
 
       # 6. Build de la aplicación
       - name: Build Application
-        run: go build -o my-secure-app main.go
+        run: |
+          GOOS=linux GOARCH=amd64 go build -o my-secure-app main.go
 
       # 7. Guardar el binario como artefacto
       - name: Save Binary Artifact
