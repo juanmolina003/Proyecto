@@ -43,9 +43,8 @@ jobs:
       - name: Save Binary Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: go-binary-executable
-          path: my-secure-app
-          retention-days: 5
+          name: linux-binary
+          path: pps_app_linux
 
   # NUEVO TRABAJO: Despliegue Automatizado (CD)
   deploy:
@@ -56,7 +55,7 @@ jobs:
       - name: Descargar binario de GitHub
         uses: actions/download-artifact@v4
         with:
-          name: go-binary-executable # El nombre que pusimos en el paso 7 del primer job
+          name: linux-binary # El nombre que pusimos en el paso 7 del primer job
           path: ./dist
 
       - name: Enviar binario al servidor (SCP)
@@ -66,7 +65,7 @@ jobs:
           username: ${{ secrets.SERVER_NAME }}
           port: ${{ secrets.SERVER_PORT }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "dist/my-secure-app"
+          source: "dist/pps_app_linux"
           target: "/home/grup1/Proyecto/temp_build"
           strip_components: 1
 
@@ -88,8 +87,11 @@ jobs:
             fi
 
             # 2. Swap: poner la nueva versión
-            mv temp_build/my-secure-app server_exe
+            mv temp_build/pps_app_linux server_exe
             chmod +x server_exe
+
+            # Comprobación de seguridad: ¿Qué tipo de archivo es?
+            file server_exe
 
             # 3. Reinicio (usamos fuser porque no tenemos systemd configurado)
             fuser -k 8080/tcp || true
