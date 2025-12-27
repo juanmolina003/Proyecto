@@ -70,51 +70,42 @@ jobs:
           port: ${{ secrets.SERVER_PORT }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            set -e
             cd /home/grup1/Proyecto
             ts=$(date +%s)
 
             # 1. Backup
-            if [ -f server_exe ]; then
-              cp server_exe server_exe.bak.$ts
-            fi
+            [ -f server_exe ] && cp server_exe server_exe.bak.$ts
 
-            # 2. Swap y Permisos
-            rm -f server_exe # Borramos el anterior para evitar conflictos de inodo
-            mv temp_build/pps_app_linux server_exe
-            chmod 755 server_exe # Permisos de ejecución explícitos rwxr-xr-x
+            # 2. Swap profesional (usando install para asegurar binario)
+            # Esto limpia el archivo anterior y pone el nuevo con permisos 755
+            install -m 755 temp_build/pps_app_linux ./server_exe
             
-            # Verificación técnica del binario
-            file server_exe
+            # Verificación técnica (para tu informe)
+            file ./server_exe
 
-            # 3. Reinicio mejorado
+            # 3. Reinicio
             fuser -k 8080/tcp || true
             sleep 2
             
-            # Forzamos que se ejecute como binario usando 'sh -c' y ruta absoluta
-            # Además, limpiamos el log antes de empezar
+            # Ejecutamos con 'env -i' para limpiar variables de entorno 
+            # que puedan estar confundiendo a la shell
             > output.log
-            nohup /home/grup1/Proyecto/server_exe > /home/grup1/Proyecto/output.log 2>&1 &
-            
-            # Verificamos si el proceso realmente existe en el sistema antes de esperar
-            ps aux | grep server_exe
+            nohup env -i PATH=/usr/local/bin:/usr/bin:/bin ./server_exe > output.log 2>&1 &
 
             # 4. HEALTH CHECK
-            echo "Esperando 10 segundos a que la app arranque..."
+            echo "Esperando 10 segundos..."
             sleep 10
             if curl -f http://127.0.0.1:8080/health; then
-              echo "¡Despliegue validado con éxito!"
-              # Limpiar backups viejos (opcional)
+              echo "¡Despliegue validado!"
               find . -name "server_exe.bak.*" -not -name "server_exe.bak.$ts" -delete || true
             else
-              echo "--- ERROR DETECTADO: MOSTRANDO LOGS ---"
+              echo "--- ERROR DETECTADO: LOGS DEL SISTEMA ---"
               cat output.log
-              echo "Iniciando Rollback automático..."
+              echo "Iniciando Rollback..."
               if [ -f server_exe.bak.$ts ]; then
                 mv server_exe.bak.$ts server_exe
                 fuser -k 8080/tcp || true
                 nohup ./server_exe > output.log 2>&1 &
-                echo "Rollback completado. El servidor está en la versión anterior."
               fi
               exit 1
             fi
