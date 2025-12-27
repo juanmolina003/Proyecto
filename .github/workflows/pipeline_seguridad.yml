@@ -10,52 +10,44 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     steps:
-      # 1. Checkout del código
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. Configurar entorno de Go
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
           go-version: '1.21'
 
-      # 3. Instalación de dependencias
       - name: Install dependencies
         run: go mod tidy
 
-      # 4. Ejecución de Tests
       - name: Run Tests
         run: go test -v ./...
 
-      # 5. Análisis de Seguridad Estático (SAST)
       - name: Run Security Scan (SAST)
         uses: securego/gosec@master
         with:
           args: ./...
 
-      # 6. Build de la aplicación
-      - name: Build Application
-        run: |
-          GOOS=linux GOARCH=amd64 go build -o my-secure-app main.go
+      - name: Build Application (Cross-Compilation)
+        # Forzamos la arquitectura Linux de 64 bits para AWS
+        run: GOOS=linux GOARCH=amd64 go build -o pps_app_linux main.go
 
-      # 7. Guardar el binario como artefacto
       - name: Save Binary Artifact
         uses: actions/upload-artifact@v4
         with:
           name: linux-binary
           path: pps_app_linux
 
-  # NUEVO TRABAJO: Despliegue Automatizado (CD)
   deploy:
     needs: build-and-test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-      - name: Descargar binario de GitHub
+      - name: Descargar binario
         uses: actions/download-artifact@v4
         with:
-          name: linux-binary # El nombre que pusimos en el paso 7 del primer job
+          name: linux-binary
           path: ./dist
 
       - name: Enviar binario al servidor (SCP)
@@ -81,39 +73,39 @@ jobs:
             cd /home/grup1/Proyecto
             ts=$(date +%s)
 
-            # 1. Backup de la versión actual
+            # 1. Backup
             if [ -f server_exe ]; then
               cp server_exe server_exe.bak.$ts
             fi
 
-            # 2. Swap: poner la nueva versión
+            # 2. Swap y Permisos
             mv temp_build/pps_app_linux server_exe
             chmod +x server_exe
-
-            # Comprobación de seguridad: ¿Qué tipo de archivo es?
+            
+            # Verificación técnica del binario
             file server_exe
 
-            # 3. Reinicio (usamos fuser porque no tenemos systemd configurado)
+            # 3. Reinicio
             fuser -k 8080/tcp || true
             sleep 2
             nohup ./server_exe > output.log 2>&1 &
 
-            # 4. HEALTH CHECK mejorado
+            # 4. HEALTH CHECK
             echo "Esperando 10 segundos a que la app arranque..."
             sleep 10
             if curl -f http://127.0.0.1:8080/health; then
-              echo "¡Despliegue validado!"
-              # Eliminamos backups antiguos para no llenar el disco
+              echo "¡Despliegue validado con éxito!"
+              # Limpiar backups viejos (opcional)
               find . -name "server_exe.bak.*" -not -name "server_exe.bak.$ts" -delete || true
             else
-              echo "--- ERROR DETECTADO: MOSTRANDO ÚLTIMOS LOGS ---"
+              echo "--- ERROR DETECTADO: MOSTRANDO LOGS ---"
               cat output.log
-              echo "Iniciando Rollback..."
+              echo "Iniciando Rollback automático..."
               if [ -f server_exe.bak.$ts ]; then
                 mv server_exe.bak.$ts server_exe
                 fuser -k 8080/tcp || true
                 nohup ./server_exe > output.log 2>&1 &
-                echo "Rollback completado."
+                echo "Rollback completado. El servidor está en la versión anterior."
               fi
               exit 1
             fi
