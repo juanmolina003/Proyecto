@@ -80,16 +80,24 @@ jobs:
             fi
 
             # 2. Swap y Permisos
+            rm -f server_exe # Borramos el anterior para evitar conflictos de inodo
             mv temp_build/pps_app_linux server_exe
-            chmod +x server_exe
+            chmod 755 server_exe # Permisos de ejecución explícitos rwxr-xr-x
             
             # Verificación técnica del binario
             file server_exe
 
-            # 3. Reinicio
+            # 3. Reinicio mejorado
             fuser -k 8080/tcp || true
             sleep 2
-            nohup ./server_exe > output.log 2>&1 &
+            
+            # Forzamos que se ejecute como binario usando 'sh -c' y ruta absoluta
+            # Además, limpiamos el log antes de empezar
+            > output.log
+            nohup /home/grup1/Proyecto/server_exe > /home/grup1/Proyecto/output.log 2>&1 &
+            
+            # Verificamos si el proceso realmente existe en el sistema antes de esperar
+            ps aux | grep server_exe
 
             # 4. HEALTH CHECK
             echo "Esperando 10 segundos a que la app arranque..."
