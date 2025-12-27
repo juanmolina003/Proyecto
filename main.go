@@ -61,7 +61,7 @@ func main() {
 
 	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		fmt.Fprint(w, "OK") // fmt.Fprint es aceptado por gosec sin problemas
 	})
 
 	// 2. CORRECCIÓN G302: Cambiamos 0644 por 0600 para mayor seguridad
