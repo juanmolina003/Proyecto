@@ -92,21 +92,25 @@ jobs:
 
             # 3. Reinicio (usamos fuser porque no tenemos systemd configurado)
             fuser -k 8080/tcp || true
+            sleep 2
             nohup ./server_exe > output.log 2>&1 &
 
-            # 4. HEALTH CHECK
-            echo "Esperando a que la app arranque..."
+            # 4. HEALTH CHECK mejorado
+            echo "Esperando 10 segundos a que la app arranque..."
             sleep 10
-            if curl -f http://localhost:8080/health; then
+            if curl -f http://127.0.0.1:8080/health; then
               echo "¡Despliegue validado!"
-              rm -f server_exe.bak.* # Limpiar backups viejos si todo va bien
+              # Eliminamos backups antiguos para no llenar el disco
+              find . -name "server_exe.bak.*" -not -name "server_exe.bak.$ts" -delete || true
             else
-              echo "¡ERROR detectado! Iniciando Rollback..."
+              echo "--- ERROR DETECTADO: MOSTRANDO ÚLTIMOS LOGS ---"
+              cat output.log
+              echo "Iniciando Rollback..."
               if [ -f server_exe.bak.$ts ]; then
                 mv server_exe.bak.$ts server_exe
                 fuser -k 8080/tcp || true
                 nohup ./server_exe > output.log 2>&1 &
-                echo "Rollback completado con éxito."
+                echo "Rollback completado."
               fi
               exit 1
             fi
