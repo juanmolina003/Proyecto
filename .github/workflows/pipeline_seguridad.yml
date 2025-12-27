@@ -50,39 +50,63 @@ jobs:
   deploy:
     needs: build-and-test
     runs-on: ubuntu-latest
-    # Solo desplegamos cuando se hace push a la rama 'main'
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
     steps:
-      - name: Deploy to Server via SSH
+      - name: Descargar binario de GitHub
+        uses: actions/download-artifact@v4
+        with:
+          name: go-binary-executable # El nombre que pusimos en el paso 7 del primer job
+          path: ./dist
+
+      - name: Enviar binario al servidor (SCP)
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_NAME }}
+          port: ${{ secrets.SERVER_PORT }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "dist/my-secure-app"
+          target: "/home/grup1/Proyecto/temp_build"
+          strip_components: 1
+
+      - name: Backup, Swap y Rollback Automático
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_NAME }}
+          port: ${{ secrets.SERVER_PORT }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SERVER_PORT }} # Usamos el puerto 55000
           script: |
-            # 1. Definimos la carpeta de trabajo
-            cd /home/grup1
-            
-            # 2. Si no existe el código, lo clonamos. Si existe, actualizamos.
-            if [ ! -d "Proyecto" ]; then
-              git clone https://github.com/${{ github.repository }}.git Proyecto
+            set -e
+            cd /home/grup1/Proyecto
+            ts=$(date +%s)
+
+            # 1. Backup de la versión actual
+            if [ -f server_exe ]; then
+              cp server_exe server_exe.bak.$ts
             fi
-            
-            cd Proyecto
-            git fetch --all
-            git checkout main
-            git pull origin main
-            
-            # 3. Compilamos el binario directamente en el servidor
-            go build -o server_exe main.go
-            
-            # 4. Reiniciamos el servicio
-            # Intentamos matar el proceso que esté usando el puerto 8080 (si existe)
+
+            # 2. Swap: poner la nueva versión
+            mv temp_build/my-secure-app server_exe
+            chmod +x server_exe
+
+            # 3. Reinicio (usamos fuser porque no tenemos systemd configurado)
             fuser -k 8080/tcp || true
-            
-            # Ejecutamos la app en segundo plano con nohup
-            # Los logs de salida se guardarán en output.log dentro de /home/grup1/Proyecto
             nohup ./server_exe > output.log 2>&1 &
-            
-            echo "--- DESPLIEGUE AUTOMATIZADO COMPLETADO CON ÉXITO ---"
+
+            # 4. HEALTH CHECK
+            echo "Esperando a que la app arranque..."
+            sleep 5
+            if curl -f http://127.0.0.1:8080/health; then
+              echo "¡Despliegue validado!"
+              rm -f server_exe.bak.* # Limpiar backups viejos si todo va bien
+            else
+              echo "¡ERROR detectado! Iniciando Rollback..."
+              if [ -f server_exe.bak.$ts ]; then
+                mv server_exe.bak.$ts server_exe
+                fuser -k 8080/tcp || true
+                nohup ./server_exe > output.log 2>&1 &
+                echo "Rollback completado con éxito."
+              fi
+              exit 1
+            fi

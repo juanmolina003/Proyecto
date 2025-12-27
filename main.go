@@ -59,6 +59,11 @@ func main() {
 	http.HandleFunc("/", handler)
 	http.Handle("/metrics", promhttp.Handler())
 
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	})
+
 	// 2. CORRECCIÓN G302: Cambiamos 0644 por 0600 para mayor seguridad
 	f, err := os.OpenFile("app.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
