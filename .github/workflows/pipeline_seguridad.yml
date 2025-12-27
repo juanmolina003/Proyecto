@@ -3,8 +3,6 @@ name: Go Security and Build Pipeline
 on:
   push:
     branches: [ main, develop ]
-  pull_request:
-    branches: [ main, develop ]
 
 jobs:
   build-and-test:
@@ -12,57 +10,23 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
           go-version: '1.21'
-
-      - name: Install dependencies
-        run: go mod tidy
-
       - name: Run Tests
         run: go test -v ./...
-
       - name: Run Security Scan (SAST)
         uses: securego/gosec@master
         with:
           args: ./...
 
-      # 6. Build de la aplicación (Estático y Forzado)
-      - name: Build Application (Static Cross-Compilation)
-        run: |
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -o pps_app_linux main.go
-
-      - name: Save Binary Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-binary
-          path: pps_app_linux
-
   deploy:
     needs: build-and-test
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
     steps:
-      - name: Descargar binario
-        uses: actions/download-artifact@v4
-        with:
-          name: linux-binary
-          path: ./dist
-
-      - name: Enviar binario al servidor (SCP)
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SERVER_IP }}
-          username: ${{ secrets.SERVER_NAME }}
-          port: ${{ secrets.SERVER_PORT }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "dist/pps_app_linux"
-          target: "/home/grup1/Proyecto/temp_build"
-          strip_components: 1
-
-      - name: Backup, Swap y Rollback Automático
+      - name: Despliegue y Compilación Nativa
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_IP }}
@@ -73,39 +37,32 @@ jobs:
             cd /home/grup1/Proyecto
             ts=$(date +%s)
 
-            # 1. Backup
+            # 1. Actualizar código fuente
+            git pull origin main
+
+            # 2. Backup del binario anterior (si existe)
             [ -f server_exe ] && cp server_exe server_exe.bak.$ts
 
-            # 2. Swap profesional (usando install para asegurar binario)
-            # Esto limpia el archivo anterior y pone el nuevo con permisos 755
-            install -m 755 temp_build/pps_app_linux ./server_exe
+            # 3. COMPILACIÓN NATIVA (En el propio servidor)
+            # Esto soluciona los errores de "Syntax error" y "ELF not found"
+            go build -o server_exe_new main.go
             
-            # Verificación técnica (para tu informe)
-            file ./server_exe
+            # 4. Swap y Permisos
+            mv server_exe_new server_exe
+            chmod +x server_exe
 
-            # 3. Reinicio
+            # 5. Reinicio
             fuser -k 8080/tcp || true
-            sleep 2
-            
-            # Ejecutamos con 'env -i' para limpiar variables de entorno 
-            # que puedan estar confundiendo a la shell
-            > output.log
-            nohup env -i PATH=/usr/local/bin:/usr/bin:/bin ./server_exe > output.log 2>&1 &
+            nohup ./server_exe > output.log 2>&1 &
 
-            # 4. HEALTH CHECK
-            echo "Esperando 10 segundos..."
+            # 6. Health Check
+            echo "Esperando arranque..."
             sleep 10
             if curl -f http://127.0.0.1:8080/health; then
-              echo "¡Despliegue validado!"
-              find . -name "server_exe.bak.*" -not -name "server_exe.bak.$ts" -delete || true
+              echo "¡Despliegue exitoso!"
             else
-              echo "--- ERROR DETECTADO: LOGS DEL SISTEMA ---"
+              echo "--- ERROR: MOSTRANDO LOGS ---"
               cat output.log
-              echo "Iniciando Rollback..."
-              if [ -f server_exe.bak.$ts ]; then
-                mv server_exe.bak.$ts server_exe
-                fuser -k 8080/tcp || true
-                nohup ./server_exe > output.log 2>&1 &
-              fi
+              [ -f server_exe.bak.$ts ] && mv server_exe.bak.$ts server_exe && fuser -k 8080/tcp || true && nohup ./server_exe > output.log 2>&1 &
               exit 1
             fi
