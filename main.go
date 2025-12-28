@@ -29,6 +29,7 @@ func enviarAlertaDiscord(mensaje string) {
 	}
 	jsonPayload, _ := json.Marshal(payload)
 
+	// #nosec G107 - La URL proviene de una variable de entorno segura configurada en GitHub Secrets
 	resp, err := http.Post(webhookURL, "application/json", bytes.NewBuffer(jsonPayload))
 	if err != nil {
 		log.Printf("Error enviando alerta: %v", err)
