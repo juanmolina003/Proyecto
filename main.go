@@ -14,7 +14,7 @@ import (
 
 // --- Función para enviar la alerta ---
 func enviarAlertaDiscord(mensaje string) {
-	webhookURL := "https://discordapp.com/api/webhooks/1454198381495976271/dUKGCz5e4Wmj4NekTOjrgaPLka7Uq6MuukAr5-Lbvm9syiEKZjFZ26y9_QBJqbHee4H5"
+	webhookURL := "DISCORD_WEBHOOK_URL"
 
 	payload := map[string]string{
 		"content": "🚨 **ALERTA DEVSECOPS**: " + mensaje,

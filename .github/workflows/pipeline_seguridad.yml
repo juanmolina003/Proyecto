@@ -53,6 +53,8 @@ jobs:
 
             # 5. Reinicio
             fuser -k 8080/tcp || true
+            # Exportamos la variable antes de lanzar el binario
+            export DISCORD_WEBHOOK_URL="${{ secrets.DISCORD_WEBHOOK_URL }}"
             nohup ./server_exe > output.log 2>&1 &
 
             # 6. Health Check
