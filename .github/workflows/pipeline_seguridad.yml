@@ -53,14 +53,18 @@ jobs:
 
             # 5. Reinicio
             fuser -k 8080/tcp || true
-           
-            nohup ./server_exe > output.log 2>&1 &
+            sleep 2
+
+            # Usamos 'env' para que la URL del Secret se inyecte directamente al proceso
+            nohup env DISCORD_WEBHOOK_URL="${{ secrets.DISCORD_WEBHOOK_URL }}" ./server_exe > output.log 2>&1 &
 
             # 6. Health Check
             echo "Esperando arranque..."
             sleep 10
             if curl -f http://127.0.0.1:8080/health; then
               echo "¡Despliegue exitoso!"
+              #Borra todos los backups y solo deja el ultimo
+              find . -name "server_exe.bak.*" -not -name "server_exe.bak.$ts" -delete || true
             else
               echo "--- ERROR: MOSTRANDO LOGS ---"
               cat output.log
